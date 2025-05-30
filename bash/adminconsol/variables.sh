@@ -16,7 +16,7 @@ dns_server="192.168.1.254"
 interface_name="ens33"
 
 # Variables SSH
-ssh_pub_key_name="authorized_keys"
+ssh_pub_key_name="id_ed0001.pub"
 ssh_pub_key_value="VOTRE CLÉ PUBLIQUE ICI"
 ssh_priv_key_name="id_ed0001"
 ssh_priv_key_value="-----BEGIN OPENSSH PRIVATE KEY-----
