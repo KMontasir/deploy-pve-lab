@@ -1,0 +1,262 @@
+---
+- name: Install Prometheus, Grafana, Node Exporter and NGINX with SSL
+  hosts: monitoring
+  become: true
+  vars_files:
+    - ./vars/variables_monitoring.yml
+
+  tasks:
+    - name: Install required packages
+      apt:
+        name:
+          - wget
+          - curl
+          - software-properties-common
+          - gnupg
+          - nginx
+          - apache2-utils
+          - openssl
+        update_cache: true
+        state: present
+
+    # --- Prometheus ---
+    - name: Create prometheus user
+      user:
+        name: prometheus
+        shell: /sbin/nologin
+        create_home: no
+        system: yes
+
+    - name: Create Prometheus directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: prometheus
+        group: prometheus
+      loop:
+        - /var/lib/prometheus
+        - /etc/prometheus
+
+    - name: Download Prometheus archive
+      get_url:
+        url: "https://github.com/prometheus/prometheus/releases/download/v{{ prom_version }}/prometheus-{{ prom_version }}.linux-amd64.tar.gz"
+        dest: /tmp/prometheus.tar.gz
+
+    - name: Extract Prometheus
+      unarchive:
+        src: /tmp/prometheus.tar.gz
+        dest: /opt/
+        remote_src: true
+
+    - name: Copy Prometheus binary
+      copy:
+        src: "/opt/prometheus-{{ prom_version }}.linux-amd64/prometheus"
+        dest: /usr/local/bin/prometheus
+        remote_src: true
+        owner: prometheus
+        group: prometheus
+        mode: '0755'
+
+    - name: Deploy prometheus.yml from variable
+      copy:
+        content: "{{ prometheus_config }}"
+        dest: /etc/prometheus/prometheus.yml
+        owner: prometheus
+        group: prometheus
+        mode: '0644'
+
+    - name: Create Prometheus systemd service
+      copy:
+        dest: /etc/systemd/system/prometheus.service
+        content: |
+          [Unit]
+          Description=Prometheus
+          After=network.target
+
+          [Service]
+          User=prometheus
+          ExecStart=/usr/local/bin/prometheus --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/var/lib/prometheus --web.listen-address=127.0.0.1:9090
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload systemd and start Prometheus
+      systemd:
+        daemon_reload: yes
+        name: prometheus
+        enabled: true
+        state: started
+
+    # --- Grafana ---
+    - name: Add Grafana GPG key
+      shell: |
+        curl -fsSL https://packages.grafana.com/gpg.key | gpg --dearmor -o /usr/share/keyrings/grafana.gpg
+      args:
+        creates: /usr/share/keyrings/grafana.gpg
+
+    - name: Add Grafana repository
+      copy:
+        dest: /etc/apt/sources.list.d/grafana.list
+        content: "deb [signed-by=/usr/share/keyrings/grafana.gpg] https://packages.grafana.com/oss/deb stable main"
+        mode: '0644'
+    - name: Mettre à jour le cache APT après ajout du dépôt Grafana
+      apt:
+        update_cache: yes
+
+    - name: Install Grafana
+      apt:
+        name: grafana
+        state: present
+        update_cache: yes
+
+    - name: Configure Grafana to listen only on localhost
+      lineinfile:
+        path: /etc/grafana/grafana.ini
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^;?http_addr =.*', line: 'http_addr = 127.0.0.1' }
+        - { regexp: '^;?protocol = .*', line: 'protocol = http' }
+
+    - name: Enable and start Grafana
+      systemd:
+        name: grafana-server
+        enabled: true
+        state: started
+
+    # --- Node Exporter ---
+    - name: Create node_exporter user
+      user:
+        name: node_exporter
+        shell: /sbin/nologin
+        create_home: no
+        system: yes
+
+    - name: Download Node Exporter
+      get_url:
+        url: "https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz"
+        dest: /tmp/node_exporter.tar.gz
+
+    - name: Extract Node Exporter
+      unarchive:
+        src: /tmp/node_exporter.tar.gz
+        dest: /opt/
+        remote_src: true
+
+    - name: Copy Node Exporter binary
+      copy:
+        src: "/opt/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+        dest: /usr/local/bin/node_exporter
+        remote_src: true
+        owner: node_exporter
+        group: node_exporter
+        mode: '0755'
+
+    - name: Create Node Exporter service
+      copy:
+        dest: /etc/systemd/system/node_exporter.service
+        content: |
+          [Unit]
+          Description=Node Exporter
+          After=network.target
+
+          [Service]
+          User=node_exporter
+          ExecStart=/usr/local/bin/node_exporter
+          Restart=always
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Reload and start Node Exporter
+      systemd:
+        daemon_reload: yes
+        name: node_exporter
+        enabled: true
+        state: started
+
+    # --- SSL Self-signed ---
+    - name: Create SSL directory
+      file:
+        path: "{{ ssl_dir }}"
+        state: directory
+
+    - name: Generate self-signed certificate
+      command: >
+        openssl req -x509 -nodes -days 3650 -newkey rsa:2048
+        -keyout {{ ssl_dir }}/selfsigned.key
+        -out {{ ssl_dir }}/selfsigned.crt
+        -subj "/CN=localhost"
+      args:
+        creates: "{{ ssl_dir }}/selfsigned.crt"
+
+    # --- HTTP Auth ---
+    - name: Create htpasswd file
+      command: htpasswd -b -c /etc/nginx/.htpasswd "{{ basic_auth_user }}" "{{ basic_auth_pass }}"
+      args:
+        creates: /etc/nginx/.htpasswd
+
+    # --- NGINX Configs ---
+    - name: Remove default NGINX site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Deploy Prometheus NGINX config
+      copy:
+        dest: /etc/nginx/sites-available/prometheus-secure
+        content: |
+          server {
+              listen 9443 ssl;
+              server_name _;
+
+              ssl_certificate     {{ ssl_dir }}/selfsigned.crt;
+              ssl_certificate_key {{ ssl_dir }}/selfsigned.key;
+
+              location / {
+                  proxy_pass http://127.0.0.1:9090;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+
+                  auth_basic "Prometheus Login";
+                  auth_basic_user_file /etc/nginx/.htpasswd;
+              }
+          }
+
+    - name: Deploy Grafana NGINX config
+      copy:
+        dest: /etc/nginx/sites-available/grafana-secure
+        content: |
+          server {
+              listen 9444 ssl;
+              server_name _;
+
+              ssl_certificate     {{ ssl_dir }}/selfsigned.crt;
+              ssl_certificate_key {{ ssl_dir }}/selfsigned.key;
+
+              location / {
+                  proxy_pass http://127.0.0.1:3000;
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+              }
+          }
+
+    - name: Enable NGINX sites
+      file:
+        src: "/etc/nginx/sites-available/{{ item }}"
+        dest: "/etc/nginx/sites-enabled/{{ item }}"
+        state: link
+      loop:
+        - prometheus-secure
+        - grafana-secure
+
+    - name: Test and reload NGINX
+      command: nginx -t
+      notify: Restart nginx
+
+  handlers:
+    - name: Restart nginx
+      service:
+        name: nginx
+        state: restarted

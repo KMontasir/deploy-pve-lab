@@ -1,0 +1,47 @@
+---
+- name: Configure Debian host
+  hosts: template
+  become: yes
+
+  pre_tasks:
+    - name: Include host-specific variables
+      include_vars: "{{ vars_file }}"
+
+  tasks:
+    - name: Set hostname
+      hostname:
+        name: "{{ hostname }}"
+
+    - name: Update /etc/hosts
+      copy:
+        dest: /etc/hosts
+        content: |
+          127.0.0.1   localhost
+          {{ ip_address }} {{ hostname }}
+
+    - name: Configure static network
+      copy:
+        dest: /etc/network/interfaces
+        content: |
+          auto lo
+          iface lo inet loopback
+
+          auto eth0
+          iface eth0 inet static
+              address {{ ip_address }}
+              netmask {{ netmask }}
+              gateway {{ gateway }}
+
+    - name: Configure resolv.conf
+      copy:
+        dest: /etc/resolv.conf
+        content: |
+          {% for dns in dns_servers %}
+          nameserver {{ dns }}
+          {% endfor %}
+
+    - name: Reboot without waiting (async, safe)
+      shell: "sleep 2 && reboot"
+      async: 1
+      poll: 0
+      ignore_errors: true

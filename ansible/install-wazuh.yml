@@ -1,0 +1,107 @@
+---
+- name: Installer Wazuh sur Debian 12
+  hosts: edr
+  become: true
+  vars_files:
+    - ./vars/variables_edr.yml
+
+  tasks:
+    - name: Mettre à jour le système
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Installer les paquets nécessaires
+      apt:
+        name:
+          - curl
+          - sudo
+          - gnupg
+          - apt-transport-https
+        state: present
+
+    - name: Télécharger le script d'installation Wazuh
+      get_url:
+        url: https://packages.wazuh.com/4.12/wazuh-install.sh
+        dest: /root/wazuh-install.sh
+        mode: '0755'
+
+    - name: Générer le fichier config.yml
+      copy:
+        dest: /root/config.yml
+        content: |
+          nodes:
+            indexer:
+              - name: {{ indexer_name }}
+                ip: {{ ip_address }}
+
+            server:
+              - name: {{ server_name }}
+                ip: {{ ip_address }}
+
+            dashboard:
+              - name: {{ dashboard_name }}
+                ip: {{ ip_address }}
+
+    - name: Générer les fichiers de configuration
+      command: ./wazuh-install.sh --generate-config-files
+      args:
+        chdir: /root
+
+    - name: Vérifier que le tarball de configuration a été généré
+      stat:
+        path: /root/wazuh-install-files.tar
+      register: wazuh_tarball
+
+    - name: Échouer si le tarball n'existe pas
+      fail:
+        msg: "Erreur : wazuh-install-files.tar non généré."
+      when: not wazuh_tarball.stat.exists
+
+    - name: Installer l'indexer
+      command: ./wazuh-install.sh --wazuh-indexer {{ indexer_name }}
+      args:
+        chdir: /root
+
+    - name: Attendre que l'indexer démarre
+      pause:
+        seconds: 60
+
+    - name: Initialiser le cluster
+      command: ./wazuh-install.sh --start-cluster
+      args:
+        chdir: /root
+
+    - name: Installer le serveur Wazuh
+      command: ./wazuh-install.sh --wazuh-server {{ server_name }}
+      args:
+        chdir: /root
+
+    - name: Installer le dashboard
+      command: ./wazuh-install.sh --wazuh-dashboard {{ dashboard_name }}
+      args:
+        chdir: /root
+      register: dashboard_install
+      ignore_errors: true
+
+    - name: Afficher un avertissement si l'installation du dashboard a échoué
+      debug:
+        msg: |
+          L'installation du Wazuh Dashboard a échoué. Voir /var/log/wazuh-install.log pour plus d'informations.
+      when: dashboard_install.rc != 0
+
+    - name: Masquer le dépôt Wazuh dans sources.list.d (optionnel)
+      lineinfile:
+        path: /etc/apt/sources.list.d/wazuh.list
+        regexp: '^deb '
+        line: '#deb '
+        state: present
+      when: ansible_facts['os_family'] == "Debian"
+
+    - name: Mise à jour finale des dépôts
+      apt:
+        update_cache: yes
+
+    - name: Afficher le message de fin
+      debug:
+        msg: "Installation Wazuh terminée avec succès !"

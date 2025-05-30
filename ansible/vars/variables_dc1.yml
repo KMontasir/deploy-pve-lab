@@ -1,0 +1,7 @@
+hostname: dc1
+ip_address: 192.168.1.60
+gateway: 192.168.1.254
+netmask: 255.255.255.0
+dns_servers:
+  - 192.168.1.254
+  - 8.8.8.8

@@ -1,0 +1,51 @@
+all:
+  children:
+    debian_vms:
+      hosts:
+        template:
+          ansible_host: 192.168.1.100
+          ansible_user: admin-srv
+          ansible_ssh_private_key_file: ~/.ssh/id_ed0001
+          ansible_port: 2222
+          ansible_python_interpreter: /usr/bin/python3
+          vars_file: vars/variables_edr.yml
+        edr:
+          ansible_host: 192.168.1.50
+          ansible_user: admin-srv
+          ansible_ssh_private_key_file: ~/.ssh/id_ed0001
+          ansible_port: 2222
+          ansible_python_interpreter: /usr/bin/python3
+          vars_file: vars/variables_edr.yml
+        monitoring:
+          ansible_host: 192.168.1.51
+          ansible_user: admin-srv
+          ansible_ssh_private_key_file: ~/.ssh/id_ed0001
+          ansible_port: 2222
+          ansible_python_interpreter: /usr/bin/python3
+          vars_file: vars/variables_monitoring.yml
+        proxy:
+          ansible_host: 192.168.1.52
+          ansible_user: admin-srv
+          ansible_ssh_private_key_file: ~/.ssh/id_ed0001
+          ansible_port: 2222
+          ansible_python_interpreter: /usr/bin/python3
+          vars_file: vars/variables_proxy.yml
+
+    windows_vms:
+      hosts:
+        dc1:
+          ansible_host: 192.168.1.60
+          ansible_user: Administrateur
+          ansible_password: "SuperSecurePassword!"
+          ansible_connection: winrm
+          ansible_winrm_transport: basic
+          ansible_winrm_server_cert_validation: ignore
+          vars_file: vars/variables_dc1.yml
+        dc2:
+          ansible_host: 192.168.1.61
+          ansible_user: Administrateur
+          ansible_password: "SuperSecurePassword!"
+          ansible_connection: winrm
+          ansible_winrm_transport: basic
+          ansible_winrm_server_cert_validation: ignore
+          vars_file: vars/variables_dc2.yml

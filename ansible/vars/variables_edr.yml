@@ -1,0 +1,11 @@
+hostname: edr
+ip_address: 192.168.1.50
+gateway: 192.168.1.254
+netmask: 255.255.255.0
+dns_servers:
+  - 192.168.1.254
+  - 8.8.8.8
+
+indexer_name: "indexer-1"
+server_name: "server-1"
+dashboard_name: "dashboard-1"
