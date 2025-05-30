@@ -38,6 +38,7 @@ for user in "${users[@]}"; do
     echo "$user ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers > /dev/null
 
     mkdir -p /home/$user/.ssh/
+    cat $ssh_pub_key_value > /home/$user/.ssh/authorized_keys
     cat $ssh_pub_key_value > /home/$user/.ssh/$ssh_pub_key_name
     cat $ssh_priv_key_value > /home/$user/.ssh/$ssh_priv_key_name
     chown -R $user:$user /home/$user/
