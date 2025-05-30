@@ -5,6 +5,7 @@ new_hostname="console-admin"
 
 # Liste des utilisateurs à créer
 users=("admin-console" "admin-devops" "admin-netops")
+default_password="Azerty/123"
 
 # Nom de code Ubuntu/Debian
 UBUNTU_CODENAME=jammy
