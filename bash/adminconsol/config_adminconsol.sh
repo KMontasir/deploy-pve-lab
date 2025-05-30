@@ -34,6 +34,8 @@ for user in "${users[@]}"; do
     echo "Configuration de l'utilisateur : $user"
 
     useradd -m -s /bin/bash "$user"
+    echo "$user:$default_password" | chpasswd
+
     usermod -aG sudo "$user"
     echo "$user ALL=(ALL:ALL) NOPASSWD:ALL" | tee -a /etc/sudoers > /dev/null
 
