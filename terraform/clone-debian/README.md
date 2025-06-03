@@ -115,9 +115,3 @@ terraform.tfvars
 - Provisioning via SSH (remote-exec)
 - Génération automatique de VMID
 - Modules réutilisables
-
----
-
-## Aide
-
-Si tu veux aller plus loin ou automatiser autre chose, n'hésite pas à me demander ici.
